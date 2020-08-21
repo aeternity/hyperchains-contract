@@ -11,6 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "@aeternity/aepp-sdk": "7.7.0",
+    "aepp-sdk": "0.0.1-alpha.6",
+    "aeproject": "^2.2.0",
     "aeproject-lib": "^2.2.0",
     "bignumber.js": "^9.0.0"
   }
