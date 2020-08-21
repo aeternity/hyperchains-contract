@@ -3,6 +3,12 @@
 include "List.aes"
 include "Option.aes"
 
+/**
+ * Simple implementation of a staking contract for aeternity
+ * hyperchains. Supports stake aging and randomized elections
+ * (the entropy should come from external source).
+ * Delegated voting is not supported.
+ */
 payable contract SimpleElection =
 
   type delegate     = address
@@ -27,6 +33,14 @@ payable contract SimpleElection =
 
   /**
    * General variables and configurations
+   * - deposit_delay: how much does it take for the staked tokens to
+   *   provide the voting power
+   * - stake_retraction_delay: how long should the tokens provide voting 
+   *   power after the delegate has requested to withdraw them
+   * - withdraw_delay: after what period of time are the tokens eligible
+   *   to withdraw after the delegate has requested to withdraw them
+   * 
+   * Should satisfy withdraw_delay >= stake_retraction_delay
    */
   record config = {
     deposit_delay          : block_height,
@@ -43,13 +57,21 @@ payable contract SimpleElection =
 
   
   /**
-   * Description of the election result on a given block
+   * Description of the election result on a given block height
    */
   record election_result = {
     leader : delegate,
     height : block_height }
 
 
+  /**
+   * The state of the staking contract
+   * - stakes: list of all staked entries for each delegate
+   * - withdraw_requests: list of all withdrawal requests for each delegate'
+   * - last_election: hypothetical information about the most recent election.
+   *   Should set to None initially and updated with each election
+   * - config: overall tweaks of the election/staking rules 
+   */
   record state = {
     stakes : map(delegate, list(stake)),
     withdraw_requests : map(delegate, list(withdraw_request)),
@@ -62,10 +84,9 @@ payable contract SimpleElection =
     init(deposit_delay, stake_retraction_delay, withdraw_delay) =
       require(
         withdraw_delay >= stake_retraction_delay,
-        "Stake retraction cannot happen after withdrawal"
+        "Stake retraction must not occur after withdrawal"
         )
-      {
-        stakes = {},
+      { stakes = {},
         withdraw_requests = {},
         last_election = None,
         config = {
@@ -82,7 +103,7 @@ payable contract SimpleElection =
     default_config() =
       { deposit_delay          = 5,
         stake_retraction_delay = 5,
-        withdraw_delay = 5 }
+        withdraw_delay         = 5 }
   
 
   /**
@@ -95,11 +116,13 @@ payable contract SimpleElection =
 
 
   /**
-   * The address of protocol restricted calls. The private key must remain unknown
+   * The address of protocol restricted calls. The private key must 
+   * remain unknown
    */
   function
     restricted_address : () => address
-    restricted_address() = ak_11111111111111111111111111111111273Yts  // 0 address
+    restricted_address() =
+      ak_11111111111111111111111111111111273Yts  // 0 address
 
 
   /**
@@ -141,14 +164,16 @@ payable contract SimpleElection =
 
 
   /**
-   * Get the amount of the stake that is already retracted by withdrawal requests 
+   * Get the amount of the stake that is already retracted by 
+   * withdrawal requests 
    */
   function
     retracted_stake : delegate => tokens
     retracted_stake(address) =
       List.sum([ w.value 
                | w <- state.withdraw_requests[address = []]
-               , if(Chain.block_height > w.created + state.config.stake_retraction_delay)
+               , if(Chain.block_height >
+                    w.created + state.config.stake_retraction_delay)
                ])
 
 
@@ -157,7 +182,8 @@ payable contract SimpleElection =
    * of the rest
    */
   function
-    extract_ripe_withdrawals : list(withdraw_request) => (tokens * list(withdraw_request)) 
+    extract_ripe_withdrawals : list(withdraw_request) =>
+                               (tokens * list(withdraw_request)) 
     extract_ripe_withdrawals([]) = (0, [])
     extract_ripe_withdrawals(w::t) =
       let (tokens, rest) = extract_ripe_withdrawals(t)
@@ -202,7 +228,8 @@ payable contract SimpleElection =
 
 
   /**
-   * Extracts list of candidates along with their voting power from the state
+   * Extracts list of candidates along with their voting power
+   * from the state
    */
   function
     get_candidates : () => list(candidate) 
@@ -258,7 +285,8 @@ payable contract SimpleElection =
     reset_stake_age : delegate => unit
     reset_stake_age(addr) =
       let total = List.sum([s.value | s <- state.stakes[addr]])
-      put(state{stakes[addr] = [{value = total, created = Chain.block_height}]})
+      put(state{
+        stakes[addr] = [{value = total, created = Chain.block_height}]})
 
 
   /**
@@ -267,7 +295,8 @@ payable contract SimpleElection =
   stateful function 
     set_leader : delegate => unit
     set_leader(addr) =
-      put(state{last_election = Some({leader = addr, height = Chain.block_height})})
+      put(state{
+        last_election = Some({leader = addr, height = Chain.block_height})})
 
 
 
@@ -323,7 +352,8 @@ payable contract SimpleElection =
 
 
   /**
-   * Returns the leader of the upcoming generation without performing the election
+   * Returns the leader of the upcoming generation without 
+   * performing the election
    */
   entrypoint 
     get_computed_leader : () => option(delegate)
@@ -364,4 +394,3 @@ payable contract SimpleElection =
       protocol_restrict()
       let stake = staked_tokens(address)
       put(state{stakes[address] = [], withdraw_requests[address] = []})
-
