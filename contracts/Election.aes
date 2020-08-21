@@ -80,8 +80,9 @@ payable contract SimpleElection =
   function
     default_config : () => config
     default_config() =
-      { withdraw_delay = 10,
-        deposit_delay  = 10 }
+      { deposit_delay          = 5,
+        stake_retraction_delay = 5,
+        withdraw_delay = 5 }
   
 
   /**
@@ -118,7 +119,7 @@ payable contract SimpleElection =
     valuate(s) =
       let age = Chain.block_height - s.created
       if(age < state.config.deposit_delay) 0
-      else s.value + s.age^2
+      else s.value + age^2
 
 
   /**
@@ -156,7 +157,7 @@ payable contract SimpleElection =
    * of the rest
    */
   function
-    extract_ripe_withdrawals : list(withdraw_request) => (tokens, list(withdraw_request)) 
+    extract_ripe_withdrawals : list(withdraw_request) => (tokens * list(withdraw_request)) 
     extract_ripe_withdrawals([]) = (0, [])
     extract_ripe_withdrawals(w::t) =
       let (tokens, rest) = extract_ripe_withdrawals(t)
@@ -172,12 +173,12 @@ payable contract SimpleElection =
    * Drops the least aged tokens from the stake entries
    */
   function
-    decrease_stake : (list(stake), tokens) => ()
+    decrease_stake : (list(stake), tokens) => list(stake)
     decrease_stake(stakes, value) =
       run_decrease_stake(
         List.sort(
-          (s1, s2) => valuate(s1.age < s2.age,
-          state.stakes[caller = []])),
+          (s1, s2) => s1.created > s2.created,
+          state.stakes[Call.origin = []]),
         value)
 
   function
@@ -195,8 +196,8 @@ payable contract SimpleElection =
   function 
     voting_power : delegate => int
     voting_power(address) =
-      let retracted_stake = retracted_stake(delegate)
-      let stakes = decrease_stake(state.stakes[adderss], retracted_stake)
+      let retracted_stake = retracted_stake(address)
+      let stakes = decrease_stake(state.stakes[address], retracted_stake)
       List.sum([valuate(s) | s <- stakes])
 
 
@@ -207,11 +208,9 @@ payable contract SimpleElection =
     get_candidates : () => list(candidate) 
     get_candidates() =
       let stakes = Map.to_list(state.stakes)
-      let make_candidate((addr, stks)) =
-        candidate{
-          address = addr,
-          power = List.sum([valuate(st) | st <- stks]) 
-            ++ []}
+      let make_candidate((addr, stks)) = {
+        address = addr,
+        power = List.sum([valuate(st) | st <- stks]) }
 
       List.map(make_candidate, stakes)
 
@@ -247,7 +246,7 @@ payable contract SimpleElection =
     elect_candidate(candidates, rand) =
       let total_power = List.sum([c.power | c <- candidates])
       let sorted = List.sort(candidate_cmp, candidates)
-      let shot = total_power * Bytes.to_int(rand) / hash_range
+      let shot = total_power * Bytes.to_int(rand) / hash_range()
       choose_by_power(sorted, shot)
 
 
@@ -256,19 +255,19 @@ payable contract SimpleElection =
    * creation date
    */
   stateful function
-    reset_stake_age : delegate => ()
+    reset_stake_age : delegate => unit
     reset_stake_age(addr) =
       let total = List.sum([s.value | s <- state.stakes[addr]])
-      put(state{stakes[addr] = {value = total, created = Chain.block_height}})
+      put(state{stakes[addr] = [{value = total, created = Chain.block_height}]})
 
 
   /**
    * Updates the entry of the last election result
    */
   stateful function 
-    set_leader : delegate => ()
+    set_leader : delegate => unit
     set_leader(addr) =
-      put(state{last_election = Some({leader = addr, height = Chain.block_height}}))
+      put(state{last_election = Some({leader = addr, height = Chain.block_height})})
 
 
 
@@ -286,7 +285,7 @@ payable contract SimpleElection =
       require(value > 0, "Value must be positive")
       let new_stake = {value = value, created = Chain.block_height}
 
-      put(state{stakes[caller] @ sts = new_stake :: sts}})
+      put(state{stakes[caller] @ sts = new_stake :: sts})
 
 
   /**
@@ -313,11 +312,14 @@ payable contract SimpleElection =
     withdraw() =
       let caller = Call.origin
       let (total_value, new_withdrawals) =
-        extract_ripe_withdrawals(caller)
+        extract_ripe_withdrawals(state.withdraw_requests[caller])
       
-      Chain.spend(total_value, caller)
-      put(state{ withdrawals[caller] = new_withdrawals })
-      decrease_stake(caller, total_value)
+      put(state{
+        stakes[caller] @ stakes = decrease_stake(stakes, total_value), 
+        withdraw_requests[caller] = new_withdrawals})
+      Chain.spend(caller, total_value)
+      
+      total_value
 
 
   /**
@@ -326,10 +328,11 @@ payable contract SimpleElection =
   entrypoint 
     get_computed_leader : () => option(delegate)
     get_computed_leader() =
-      Option.flat_map(
-          if(Chain.block_height != state.last_election.height) None 
-          else Some(state.last_election),
-        state.last_election)
+      switch(state.last_election)
+        None     => None 
+        Some(le) =>
+          if(Chain.block_height != le.height) None 
+          else Some(le.leader)
 
 
   /**
@@ -341,7 +344,7 @@ payable contract SimpleElection =
       protocol_restrict()
 
       switch(get_computed_leader())
-        Some(le) => le.leader
+        Some(le) => le
         None => 
           let candidates = get_candidates()
           switch (elect_candidate(candidates, rand))
@@ -356,7 +359,7 @@ payable contract SimpleElection =
    * Restricted. Vanishes the staked funds of the user in case of fraud
    */
   stateful entrypoint
-    punish : delegate => ()
+    punish : delegate => unit
     punish(address) =
       protocol_restrict()
       let stake = staked_tokens(address)
