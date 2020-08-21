@@ -1,7 +1,6 @@
 @compiler >= 4.2
 
 include "List.aes"
-include "Option.aes"
 
 /**
  * Simple implementation of a staking contract for aeternity
