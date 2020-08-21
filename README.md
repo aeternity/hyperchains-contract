@@ -6,7 +6,7 @@ Dependencies:
 - aeproject: `npm install -g aeproject`
 
 ```sh
-# star environment
+# start environment
 $ aeproject env
 
 # compile contract
