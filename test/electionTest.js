@@ -49,11 +49,34 @@ describe('Election Contract', () => {
     });
   });
 
+
   it('Deploying Election Contract', async () => {
     contract = await client.getContractInstance(ELECTION_CONTRACT);
 
-    // TODO: check init params and provide test for deploy with different params
-    const init = await contract.methods.init(300000, 320000);
-    assert.equal(init.result.returnType, 'ok');
+    const init0 = await contract.deploy([10, 5, 5]);
+    assert.equal(init0.result.returnType, 'ok');
+
+    const init1 = await contract.deploy([10, 5, 15]);
+    assert.equal(init1.result.returnType, 'ok');
+
+    const init2 = await contract.deploy([0, 0, 0]);
+    assert.equal(init2.result.returnType, 'ok');
+  });
+
+
+  it('Deploying Election Contract – errors', async () => {
+    contract = await client.getContractInstance(ELECTION_CONTRACT);
+
+    const neg0 = await contract.deploy([-10, 5, 5]).catch(e => e);;
+    assert.include(neg0.decodedError, "NEGATIVE_DEPOSIT_DELAY");
+
+    const neg1 = await contract.deploy([10, -5, 5]).catch(e => e);
+    assert.include(neg1.decodedError, "NEGATIVE_STAKE_RETRACTION_DELAY");
+
+    const neg2 = await contract.deploy([10, 5, -5]).catch(e => e);
+    assert.include(neg2.decodedError, "NEGATIVE_WITHDRAW_DELAY");
+
+    const retract_after_withdraw = await contract.deploy([10, 15, 5]).catch(e => e);
+    assert.include(retract_after_withdraw.decodedError, "STAKE_RETRACTION_AFTER_WITHDRAW");
   });
 });
