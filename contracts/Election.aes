@@ -1,3 +1,5 @@
+@compiler >= 4.2
+
 include "List.aes"
 
 payable contract SimpleElection =
@@ -11,17 +13,15 @@ payable contract SimpleElection =
    */
   record stake = {
     value     : tokens,
-    created   : block_height
-  }
+    created   : block_height }
 
 
   /**
    * Deferred withdrawal
    */
   record withdraw_request = {
-    value   : itokensnt,
-    created : block_height
-  }
+    value   : int,
+    created : block_height }
 
 
   /**
@@ -29,8 +29,7 @@ payable contract SimpleElection =
    */
   record config = {
     withdraw_delay : block_height,
-    deposit_delay  : block_height
-  }
+    deposit_delay  : block_height }
 
 
   /**
@@ -38,8 +37,7 @@ payable contract SimpleElection =
    */
   record candidate = {
     address : delegate,
-    power   : int
-  }
+    power   : int }
 
   
   /**
@@ -47,29 +45,25 @@ payable contract SimpleElection =
    */
   record election_result = {
     leader : delegate,
-    height : block_height
-  }
+    height : block_height }
 
 
   record state = {
     stakes : map(delegate, list(stake)),
     withdraw_requests : map(delegate, list(withdraw_request)),
     last_election : option(election_result),
-    config : config
-  }
+    config : config }
 
 
   entrypoint
     init : (block_height, block_height) => state
     init(withdraw_delay, deposit_delay) = {
-      stakes = #{},
-      withdraw_requests = [],
+      stakes = {},
+      withdraw_requests = {},
       last_election = None,
       config = {
         withdraw_delay = withdraw_delay,
-        deposit_delay  = deposit_delay
-      }
-    }
+        deposit_delay  = deposit_delay }}
 
 
   /**
@@ -78,10 +72,8 @@ payable contract SimpleElection =
   function
     default_config : () => config
     default_config() =
-      config{
-        withdraw_delay = 10,
-        deposit_delay  = 10
-      }
+      { withdraw_delay = 10,
+        deposit_delay  = 10 }
   
 
   /**
@@ -90,7 +82,7 @@ payable contract SimpleElection =
   function
     valuate : stake => int  
     valuate(s) =
-      let age = Block.height - s.created
+      let age = Chain.block_height - s.created
       if(age < state.config.deposit_delay) 0
       else s.value + s.age^2
 
@@ -114,8 +106,7 @@ payable contract SimpleElection =
       let make_candidate((addr, stks)) =
         candidate{
           address = addr,
-          power = List.sum([valuate(st) | st <- stks])
-        }
+          power = List.sum([valuate(st) | st <- stks]) }
       List.map(make_candidate, stakes)
 
 
@@ -191,8 +182,8 @@ payable contract SimpleElection =
 
       let all_stakes = state.stakes
       let caller_stakes = Mall_stakes[Call.origin = []]
-      let new_caller_stakes = {value = Call.value, created = Chain.block_height}::caller_stakes}
-      put(state{stakes = all_stakes{[Call.origin] = new_caller_stakes})
+      let new_caller_stakes = {value = Call.value, created = Chain.block_height}::caller_stakes
+      put(state{stakes = all_stakes{[Call.origin] = new_caller_stakes}})
 
 
   /**
@@ -242,13 +233,11 @@ payable contract SimpleElection =
       let caller_withdrawals = all_withdrawals[caller = []]
       
       let (total_value, new_withdrawals) = List.foldr(
-          (w, (amount, leftovers)) =>
-            
-          (0, []),
-          caller_withdrawals)
+            (w, (amount, leftovers) =>
+            (0, []), caller_withdrawals))
       
       Chain.spend(total_value, caller)
-      put(state{withdrawals[caller = new_withdrawals]})
+      put(state{ withdrawals[caller] = new_withdrawals })
       decrease_stake(caller, total_value)
 
 
@@ -258,7 +247,7 @@ payable contract SimpleElection =
   stateful function
     decrease_stake : (delegate, tokens) => ()
     decrease_stake(caller, value) =
-      let stakes = List.sort((s1, s2) => valuate(s1.age < s2.age, state.stakes[caller = []])
+      let stakes = List.sort((s1, s2) => valuate(s1.age < s2.age, state.stakes[caller = []]))
       let shrinked_stakes = run_decrease_stake(stakes, value)
       put(state{stakes[caller] = shrinked_stakes})
 
@@ -279,9 +268,8 @@ payable contract SimpleElection =
     get_computed_leader : () => option(delegate)
     get_computed_leader() =
       Option.flat_map(
-        le =>
-          if(Chain.block_height != le.height) None 
-          else Some(le),
+          if(Chain.block_height != state.last_election.height) None 
+          else Some(state.last_election),
         state.last_election)
 
 
@@ -297,14 +285,13 @@ payable contract SimpleElection =
         Some(le) => le.address
         None => 
           let candidates = get_candidates()
-          switch elect_candidate(candidates, rand)
+          switch (elect_candidate(candidates, rand))
             None => abort("No candidates eligible!")
             Some(leader) =>
               let stake = staked_tokens(leader)
               put(state{
                 stakes[leader] = [{value = stake, created = Chain.block_height}],
-                last_election = {leader = leader, height = Chain.block_height}
-              })
+                last_election = {leader = leader, height = Chain.block_height} })
               leader
 
 
