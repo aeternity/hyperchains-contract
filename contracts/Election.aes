@@ -82,8 +82,17 @@ payable contract SimpleElection =
     init : (block_height, block_height, block_height) => state
     init(deposit_delay, stake_retraction_delay, withdraw_delay) =
       require(
+        deposit_delay >= 0,
+        "NEGATIVE_DEPOSIT_DELAY")
+      require(
+        stake_retraction_delay >= 0,
+        "NEGATIVE_STAKE_RETRACTION_DELAY")
+      require(
+        withdraw_delay >= 0,
+        "NEGATIVE_WITHDRAW_DELAY")
+      require(
         withdraw_delay >= stake_retraction_delay,
-        "Stake retraction must not occur after withdrawal"
+        "STAKE_RETRACTION_AFTER_WITHDRAW"
         )
       { stakes = {},
         withdraw_requests = {},
@@ -130,7 +139,7 @@ payable contract SimpleElection =
   function
     protocol_restrict : () => unit
     protocol_restrict() =
-      require(Call.origin != restricted_address(), "PROTOCOL RESTRICTED")
+      require(Call.origin != restricted_address(), "PROTOCOL_RESTRICTED")
 
 
   /**
@@ -212,7 +221,7 @@ payable contract SimpleElection =
     run_decrease_stake(h::t, amount) =
       if(h.value >= amount) h{value = h.value - amount}::t
       else run_decrease_stake(t, amount - h.value)
-    run_decrease_stake([], _) = abort("Cannot decrease more stake")
+    run_decrease_stake([], _) = abort("INTERNAL__STAKE_DECREASE_UNDERFLOW")
 
 
   /**
@@ -310,7 +319,7 @@ payable contract SimpleElection =
     deposit_stake() =
       let caller = Call.origin
       let value = Call.value
-      require(value > 0, "Value must be positive")
+      require(value > 0, "ZERO_STAKE_DEPOSIT")
       let new_stake = {value = value, created = Chain.block_height}
 
       put(state{stakes[caller] @ sts = new_stake :: sts})
@@ -325,7 +334,7 @@ payable contract SimpleElection =
       let caller = Call.origin
       require(
         staked_tokens(caller) - requested_withdrawals(caller) >= amount,
-        "Withdraw too much")
+        "WITHDRAW_TOO_MUCH")
       let new_withdrawal =
         {value = amount, created = Chain.block_height}
 
@@ -377,7 +386,7 @@ payable contract SimpleElection =
         None => 
           let candidates = get_candidates()
           switch (elect_candidate(candidates, rand))
-            None => abort("No candidates eligible!")
+            None => abort("NO_CANDIDATE")
             Some(leader) =>
               reset_stake_age(leader)
               set_leader(leader)
