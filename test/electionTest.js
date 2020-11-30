@@ -48,35 +48,91 @@ describe('Election Contract', () => {
       compilerUrl: config.compilerUrl,
     });
   });
-
-
-  it('Deploying Election Contract', async () => {
+  
+  beforeEach(async () => {
     contract = await client.getContractInstance(ELECTION_CONTRACT);
-
-    const init0 = await contract.deploy([10, 5, 5]);
-    assert.equal(init0.result.returnType, 'ok');
-
-    const init1 = await contract.deploy([10, 5, 15]);
-    assert.equal(init1.result.returnType, 'ok');
-
-    const init2 = await contract.deploy([0, 0, 0]);
-    assert.equal(init2.result.returnType, 'ok');
+    const init = await contract.deploy([{ 
+      deposit_delay          : 2,
+      stake_retraction_delay : 2,
+      withdraw_delay         : 4,
+      restricted_address     : undefined
+    }]);
+    assert.equal(init.result.returnType, 'ok');
   });
 
+  // it('Deploying Election Contract', async () => {
+  //   const init1 = await contract.deploy([{
+  //     deposit_delay          : 0,
+  //     stake_retraction_delay : 0,
+  //     withdraw_delay         : 0,
+  //     restricted_address     : undefined
+  //   }]);
+  //   assert.equal(init1.result.returnType, 'ok');
 
-  it('Deploying Election Contract – errors', async () => {
-    contract = await client.getContractInstance(ELECTION_CONTRACT);
+  //   const init2 = await contract.deploy([{
+  //     deposit_delay          : 15,
+  //     stake_retraction_delay : 15,
+  //     withdraw_delay         : 15,
+  //     restricted_address     : undefined
+  //   }]);
+  //   assert.equal(init2.result.returnType, 'ok');
+  // });
 
-    const neg0 = await contract.deploy([-10, 5, 5]).catch(e => e);;
-    assert.include(neg0.decodedError, "NEGATIVE_DEPOSIT_DELAY");
 
-    const neg1 = await contract.deploy([10, -5, 5]).catch(e => e);
-    assert.include(neg1.decodedError, "NEGATIVE_STAKE_RETRACTION_DELAY");
+  // it('Deploying Election Contract – errors', async () => {
+  //   const neg0 = await contract.deploy([{
+  //     deposit_delay          : -5,
+  //     stake_retraction_delay : 5,
+  //     withdraw_delay         : 5,
+  //     restricted_address     : undefined
+  //   }]).catch(e => e);
+  //   assert.include(neg0.decodedError, "NEGATIVE_DEPOSIT_DELAY");
 
-    const neg2 = await contract.deploy([10, 5, -5]).catch(e => e);
-    assert.include(neg2.decodedError, "NEGATIVE_WITHDRAW_DELAY");
+  //   const neg1 = await contract.deploy([{
+  //     deposit_delay          : 5,
+  //     stake_retraction_delay : -5,
+  //     withdraw_delay         : 5,
+  //     restricted_address     : undefined
+  //   }]).catch(e => e);
+  //   assert.include(neg1.decodedError, "NEGATIVE_STAKE_RETRACTION_DELAY");
 
-    const retract_after_withdraw = await contract.deploy([10, 15, 5]).catch(e => e);
-    assert.include(retract_after_withdraw.decodedError, "STAKE_RETRACTION_AFTER_WITHDRAW");
-  });
+  //   const neg2 = await contract.deploy([{
+  //     deposit_delay          : 5,
+  //     stake_retraction_delay : 5,
+  //     withdraw_delay         : -5,
+  //     restricted_address     : undefined
+  //   }]).catch(e => e);
+  //   assert.include(neg2.decodedError, "NEGATIVE_WITHDRAW_DELAY");
+
+  //   const retract_after_withdraw = await contract.deploy([{
+  //     deposit_delay          : 5,
+  //     stake_retraction_delay : 6,
+  //     withdraw_delay         : 5,
+  //     restricted_address     : undefined
+  //   }]).catch(e => e);
+  //   assert.include(retract_after_withdraw.decodedError, "STAKE_RETRACTION_AFTER_WITHDRAW");
+  // });
+
+  it('block_h test', async () => {
+    
+    const h1 = await contract.methods.bh()
+    const h2 = await contract.methods.bh()
+    const h3 = await contract.methods.bh()
+    assert.equal([h1.decodedResult, h2.decodedResult, h3.decodedResult], [])
+  })
+
+  it('Deposit and withdraw', async () => {
+    const deposit = await contract.methods.deposit_stake({amount: 1000})
+    assert.equal(deposit.result.returnType, 'ok');
+    const with_req = await contract.methods.request_withdraw(1000)
+    assert.equal(with_req.result.returnType, 'ok');
+    const with_0 = await contract.methods.withdraw();
+    assert.equal(with_0.decodedResult, 0);
+    const with_1 = await contract.methods.withdraw();
+    assert.equal(with_1.decodedResult, 1000);
+    const with_2 = await contract.methods.withdraw();
+    assert.equal(with_2.decodedResult, 0);
+  })
+
+  // it('')
 });
