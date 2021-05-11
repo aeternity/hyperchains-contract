@@ -1,14 +1,18 @@
 Hyperchains Contract
 ====================
 
-Proxy lib for the AEternity project. When used as a dependency, provides compiled and ready to use StakingContract.json
+Proxy lib for the AEternity project. When used as a dependency, provides compiled and ready to use `StakingContract.json`
 
-The source code (in Sophia programming language) for the contract is in `/priv/SimpleElection.aes`
+The source code (in [Sophia programming language](https://github.com/aeternity/aesophia/blob/lima/docs/sophia.md)) for the contract is in [/contracts/Election.aes](contracts/Election.aes)
 
-The contract can be included in a rebar project or built and tested as described in "Develop locally" section of this README.
+The contract can be included in a rebar project (as described in section A of this README) or built and tested manually (section B).
 
-Build
+Usage
 -----
+
+There are two ways to use the contract provided.
+
+### A. Automatic building as a rebar3 dependency
 
 In a basic case there is no need to build it specifically, just dep it in the `rebar.config`:
 
@@ -20,12 +24,13 @@ The contract compilation target is `/data/aehyperchains/StakingContract.json`, s
 
 Globally registered `rebar3` used; if a project defined one is preferred (which generally is not a good idea), change the `{compile, "rebar3 ...` line in `rebar.config` to `{compile, "./rebar3 ...`
 
-Develop locally
----------------
+### B. Manual building when developing locally
 
 Dependencies:
-- Docker
-- aeproject: `npm install -g aeproject`
+- Docker;
+- aeproject: `npm install -g aeproject`.
+
+A typical dev cycle would go like this: 
 
 ```sh
 # start environment
